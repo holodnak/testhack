@@ -37,8 +37,31 @@
 .define PPUADDR     $2006
 .define PPUDATA     $2007
 
+.macro ldsta
+  lda #\1
+  sta \2
+.endm
+
+.macro ldsty
+  ldy #\1
+  sty.w \2
+.endm
+
 .BANK 0 SLOT 0
 .ORG $0000
+
+;;initialize the nes
+initnes:
+  ldsty $40,$4017   ;;disable frame irq
+  ldsty $0F,$4015   ;;setup volume
+  ldx #0
+  stx.w PPUCTRL     ;;disable nmi
+  stx.w PPUMASK     ;;disable rendering
+  stx.w $4010       ;;disable dmc irq
+  lda #0
+  sta PPUCTRL
+  sta PPUMASK
+  rts
 
 ;;wait for vblank, missing it sometimes
 ppuwait:
@@ -51,7 +74,7 @@ ppuwait:
   rti
 
 ;;start executing original rom
-.ORG $036A
+.ORG $036B
 start:
   lda #2
   sta $8000
@@ -59,6 +82,12 @@ start:
 ;;reset vector
 .ORG $0370
 
+  sei           ;;disable irq
+  cld           ;;disable decimal mode
+  ldx #$FF
+  txs           ;;setup stack
+
+  jsr initnes
   jsr ppuwait
   jsr ppuwait
 
@@ -75,18 +104,17 @@ start:
   sta $01
   lda #$00
   sta $00
-  sta PPUADDR
+  sta PPUADDR  ;; load the destination address into the PPU
   sta PPUADDR
   ldy #0
   ldx #32
-loop:
-  lda ($00),y
+- lda ($00),y  ;; copy one byte
   sta PPUDATA
   iny
-  bne loop
+  bne -
   inc $01
   dex
-  bne loop
+  bne -
 
   ;;begin real rom
   jmp start
